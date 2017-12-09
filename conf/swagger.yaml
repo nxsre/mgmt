@@ -1,0 +1,538 @@
+#https://github.com/OAI/OpenAPI-Specification/tree/master/examples/v2.0/yaml
+swagger: '2.0'
+info:
+  version: 1.0.0
+  title: Ansilbe API
+  description: >-
+    Ansible 管理接口
+  termsOfService: 'http://swagger.io/terms/'
+  contact:
+    name: Swagger API Team
+    url: 'http://swagger.io'
+  license:
+    name: Creative Commons 4.0 International
+    url: 'http://creativecommons.org/licenses/by/4.0/'
+host: '172.168.88.88:8080'
+basePath: /api/v1
+schemes:
+  - http
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+  
+paths:
+  '/policies/{id}':
+    parameters:
+    - $ref: '#/parameters/Version'
+    - $ref: '#/parameters/AccessKeyId'
+    - $ref: '#/parameters/SignatureMethod'
+    - $ref: '#/parameters/SignatureVersion'
+    - $ref: '#/parameters/SignatureNonce'
+    - $ref: '#/parameters/Timestamp'
+    - $ref: '#/parameters/Signature'
+    - name: id
+      in: path 
+      required: true
+      type: string
+    get:
+      description: |
+        获取IAM策略
+      tags:
+        - Policies
+      summary: get Policy
+      operationId: getPolicy
+      responses:
+        "200":
+          description: 返回指定策略
+          schema:
+            $ref: '#/definitions/Policy'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+    delete:
+      description: |
+        删除IAM策略
+      tags:
+        - Policies
+      summary: get Policy
+      operationId: delPolicy
+      responses:
+        "201":
+          description: 无返回值
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  '/policies':
+    parameters:
+    - $ref: '#/parameters/Version'
+    - $ref: '#/parameters/AccessKeyId'
+    - $ref: '#/parameters/SignatureMethod'
+    - $ref: '#/parameters/SignatureVersion'
+    - $ref: '#/parameters/SignatureNonce'
+    - $ref: '#/parameters/Timestamp'
+    - $ref: '#/parameters/Signature'
+    post:
+      description: |
+        新增IAM策略
+      tags:
+        - Policies
+      summary: put Policy
+      operationId: createPolicy
+      parameters:
+      - name: policy_data
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/Policy'
+      responses:
+        "201":
+          description: 无返回值
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  
+            
+  '/accesskeys/{key_id}/policies':
+    parameters:
+    - $ref: '#/parameters/Version'
+    - $ref: '#/parameters/AccessKeyId'
+    - $ref: '#/parameters/SignatureMethod'
+    - $ref: '#/parameters/SignatureVersion'
+    - $ref: '#/parameters/SignatureNonce'
+    - $ref: '#/parameters/Timestamp'
+    - $ref: '#/parameters/Signature'
+    get:
+      description: |
+        获取指定 access_key_id 匹配的策略
+      tags:
+        - AccessKeys
+      summary: get Policy
+      operationId: getAccessKeyPolicies
+      parameters:
+      - name: key_id
+        type: string
+        in: path
+        required: true
+      responses:
+        "200":
+          description: 返回匹配策略
+          schema:
+            $ref: '#/definitions/Policies'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  '/accesskeys':
+    parameters:
+    - $ref: '#/parameters/Version'
+    - $ref: '#/parameters/AccessKeyId'
+    - $ref: '#/parameters/SignatureMethod'
+    - $ref: '#/parameters/SignatureVersion'
+    - $ref: '#/parameters/SignatureNonce'
+    - $ref: '#/parameters/Timestamp'
+    - $ref: '#/parameters/Signature'
+    post:
+      description: |
+        新增用户
+      summary: create AccessKey
+      operationId: createAccessKey
+      tags:
+      - AccessKeys
+      parameters:
+      - name: access_key
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/AccessKey'
+      responses:
+        "201":
+          description: 无返回值
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+    get:
+      description: |
+        获取用户列表
+      summary: get AccessKeys
+      operationId: getAccessKeys
+      parameters:
+      - name: action
+        description: |
+          参数为 generate 时生成 key_id 及 key_secret
+        type: string
+        in: query
+        required: false
+      tags:
+      - AccessKeys
+      responses:
+        "200":
+          description: 返回 AccessKey 列表，如果action=generate,则返回只包含一个自动生成的Key元素的数组
+          schema:
+            $ref: '#/definitions/AccessKeys'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  '/accesskeys/{key_id}':
+    parameters:
+    - $ref: '#/parameters/Version'
+    - $ref: '#/parameters/AccessKeyId'
+    - $ref: '#/parameters/SignatureMethod'
+    - $ref: '#/parameters/SignatureVersion'
+    - $ref: '#/parameters/SignatureNonce'
+    - $ref: '#/parameters/Timestamp'
+    - $ref: '#/parameters/Signature'
+    get:
+      description: |
+        获取用户信息
+      summary: get AccessKey
+      operationId: getAccessKey
+      parameters:
+      - name: key_id
+        type: string
+        in: path
+        required: true
+      tags:
+      - AccessKeys
+      responses:
+        "200":
+          description: 返回 AccessKey
+          schema:
+            $ref: '#/definitions/AccessKey'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+    delete:
+      description: |
+        获取用户信息
+      summary: delete AccessKey
+      operationId: deleteAccessKey
+      parameters:
+      - name: key_id
+        type: string
+        in: path
+        required: true
+      tags:
+      - AccessKeys
+      responses:
+        "201":
+          description: 无返回值
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+
+  '/tasks/{task_id}':
+    parameters:
+    - $ref: '#/parameters/Version'
+    - $ref: '#/parameters/AccessKeyId'
+    - $ref: '#/parameters/SignatureMethod'
+    - $ref: '#/parameters/SignatureVersion'
+    - $ref: '#/parameters/SignatureNonce'
+    - $ref: '#/parameters/Timestamp'
+    - $ref: '#/parameters/Signature'
+    - name: task_id
+      in: path
+      description: Taskid
+      required: true
+      type: string
+      
+    delete:
+      description: |
+        修改任务
+      consumes:
+        - application/json
+      tags:
+        - Tasks
+      summary: delete Task
+      operationId: deleteTask
+      parameters:
+      - name: action
+        type: string
+        description: ->|
+          action=stop 时停止任务
+        in: query
+        required: true
+    
+      responses:
+        '201':
+          description: 无返回值
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+    get:
+      description: |
+        获取任务状态
+      consumes:
+        - application/json
+      tags:
+        - Tasks
+      summary: Get Task
+      operationId: getTask
+      responses:
+        '200':
+          description: 返回TaskID
+          schema:
+            $ref: '#/definitions/TaskState'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  '/tasks':
+    parameters:
+    - $ref: '#/parameters/Version'
+    - $ref: '#/parameters/AccessKeyId'
+    - $ref: '#/parameters/SignatureMethod'
+    - $ref: '#/parameters/SignatureVersion'
+    - $ref: '#/parameters/SignatureNonce'
+    - $ref: '#/parameters/Timestamp'
+    - $ref: '#/parameters/Signature'
+    get:
+      description: |
+        获取任务状态
+      consumes:
+        - application/json
+      tags:
+        - Tasks
+      summary: Get Task
+      operationId: getTasks
+      responses:
+        '200':
+          description: 返回TaskIDs state
+          schema:
+            $ref: '#/definitions/TaskStates'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+    post:
+      description: |
+        创建任务
+      consumes:
+        - application/json
+      tags:
+        - Tasks
+      summary: Create Task
+      operationId: createTask
+      parameters:
+      - name: task
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/Task'
+      responses:
+        '200':
+          description: 返回TaskID
+          schema:
+            $ref: '#/definitions/TaskState'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+parameters:
+  Version:
+    type: string
+    name: Version
+    in: query
+    required: true
+  AccessKeyId:
+    type: string
+    name: AccessKeyId
+    in: query
+    required: true
+  SignatureMethod:
+    type: string
+    name: SignatureMethod
+    in: query
+    required: true
+  SignatureVersion:
+    type: string
+    name: SignatureVersion
+    in: query
+    required: true
+  SignatureNonce:
+    type: string
+    name: SignatureNonce
+    in: query
+    required: true
+  Timestamp:
+    type: string
+    name: Timestamp
+    in: query
+    required: true
+  Signature:
+    type: string
+    name: Signature
+    in: query
+    required: true    
+
+definitions:
+  Error:
+    type: object
+    properties:
+      code:
+        type: integer
+        format: int32
+      fields:
+        type: string
+      message:
+        type: string
+  AccessKey:
+    type: object
+    properties:
+      KeyId:
+        type: string
+      KeySecret:
+        type: string
+      NickName:
+        type: string
+      IsAdmin:
+        type: integer 
+        format: int32
+      Comment:
+        type: string
+        
+  AccessKeys:
+    type: array
+    items:
+      $ref: '#/definitions/AccessKey'
+      
+  ExtraVars:
+    type: object
+    additionalProperties:
+      type: string
+     
+  InventoryData:
+    type: object
+    additionalProperties:
+      allOf:
+        - additionalProperties:
+            type: object
+            
+        - type: array
+          items:
+            type: string
+      
+  InventoryDatas:
+    type: object
+    additionalProperties:
+      $ref: '#/definitions/InventoryData'
+      
+  ChildStatus:
+    type: object
+    additionalProperties:
+      type: string
+          
+  TaskState:
+    type: object
+    properties:
+      status:
+        description: 运行状态
+        type: string
+      childstatus:
+        description: 子任务状态
+        additionalProperties:
+          $ref: '#/definitions/ChildStatus'
+      taskid:
+        description: 由machinery生成的taskid
+        type: string
+      version:
+        description: 版本号
+        type: string
+        
+  TaskStates:
+    type: array
+    items: 
+      $ref: '#/definitions/TaskState'
+      
+  Task:
+    type: object
+    properties:
+      extra_vars:
+        $ref: '#/definitions/ExtraVars'
+      inventory:
+        $ref: '#/definitions/InventoryDatas'
+      module:
+        description: >-
+          任务类型(ansible modules)，参考
+          http://docs.ansible.com/ansible/list_of_all_modules.html
+        type: string
+        example: raw
+      script:
+        description: >-
+           直接执行脚本, 脚本中可以调用playbook 
+        type: string
+        example: raw
+      script_args:
+        type: string
+        example: -a aaa -b bbb -c
+      module_args:
+        type: string
+        example: uptime
+      playbook:
+        type: string
+        example: /root/ping.yml
+      type:
+        type: string
+        example: playbook|module|script
+
+  condition:
+    properties:
+      type:
+        type: string
+      options:
+        $ref: '#/definitions/condition_options'
+      
+
+  condition_options:
+    additionalProperties:
+      type: string
+        
+  conditions:
+    additionalProperties:
+      $ref: '#/definitions/condition'
+   
+  Policy:
+    type: object
+    properties:
+      id:
+        type: string
+      description:
+        type: string
+      subjects:
+        type: array
+        items:
+          type: string
+      actions:
+        type: array
+        items:
+          type: string
+      effect:
+        type: string
+      resources:
+        type: array
+        items:
+          type: string
+      conditions:
+        $ref: '#/definitions/conditions'
+  
+  Policies:
+    type: array
+    items:
+      $ref: '#/definitions/Policy'
+    
+
