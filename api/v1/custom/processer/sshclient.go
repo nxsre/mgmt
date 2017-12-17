@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/soopsio/go-sshd/scp"
 	"golang.org/x/crypto/ssh"
@@ -23,6 +24,7 @@ func NewSSHClient(user, password, ip_port string) (sshClient, error) {
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			return nil
 		},
+		Timeout: 10 * time.Second,
 	}
 	client, err := ssh.Dial("tcp", ip_port, &Conf)
 	if err != nil {
@@ -37,6 +39,7 @@ func (c *sshClient) ScpFile(src, dst string) error {
 
 func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 	if session, err := c.client.NewSession(); err == nil {
+
 		defer session.Close()
 		// SendRequest 用途参考
 		// https://github.com/golang/crypto/blob/master/ssh/session.go
@@ -51,7 +54,6 @@ func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 		// if stderr != nil {
 		// 	session.Stderr = stderr
 		// }
-		wg := sync.WaitGroup{}
 
 		stdoutPipe, err := session.StdoutPipe()
 		if err != nil {
@@ -62,6 +64,7 @@ func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
+		wg := sync.WaitGroup{}
 
 		wg.Add(1)
 		go func() {
@@ -108,12 +111,15 @@ func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 		if err := session.Start("bash -c \"" + cmd + "\""); err != nil {
 			return err
 		}
+		log.Println("等待运行结束", cmd)
+		session.Wait()
 		wg.Wait()
-		return session.Wait()
+		log.Println("脚本执行完成", cmd)
+		return err
 		// return session.Run()
 
 	} else {
-		log.Fatalln("获取 session 失败", err)
+		return err
 	}
 	return nil
 }

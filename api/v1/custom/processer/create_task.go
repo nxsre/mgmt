@@ -44,7 +44,7 @@ func CreateTask(p tasks.CreateTaskParams) middleware.Responder {
 
 	t := strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
 	// 初始化状态消息
-	collChildStatus(&message.Message{
+	collStatus(&message.Message{
 		TaskID: task_sign.UUID,
 		Type:   "taskstatus",
 		Content: message.MsgContent{

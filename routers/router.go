@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 	"github.com/soopsio/mgmt/api/v1/restapi"
 	"github.com/soopsio/mgmt/api/v1/restapi/operations"
 	"github.com/soopsio/mgmt/controllers"
+	"github.com/thoas/stats"
 	"go.uber.org/zap"
 	// "github.com/soopsio/mgmt/pipe/longpoll"
 )
@@ -36,7 +38,7 @@ func Init(o *xorm.Engine, l *zap.Logger) {
 }
 
 func init() {
-
+	middleware := stats.New()
 	beego.Router("/", &controllers.MainController{})
 	// ansible api 的逻辑由 goswagger 实现
 	swaggerSpec, err := loads.Analyzed(restapi.SwaggerJSON, "")
@@ -65,8 +67,18 @@ func init() {
 			// ctx.Output.Body([]byte("非法请求"))
 		}
 	}
+
 	beego.InsertFilter("/api/v1/*.*", beego.BeforeRouter, ApiFilter)
-	beego.Handler("/api/v1/*.*", rapi.GetHandler())
+	beego.Handler("/api/v1/*.*", middleware.Handler(rapi.GetHandler()))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		b, _ := json.Marshal(middleware.Data())
+		w.Write(b)
+	})
+
+	beego.Handler("/stats", middleware.Handler(mux))
 
 	// 长轮询接口初始化
 	// longpollManager, _ := longpoll.GetLongpollManager()

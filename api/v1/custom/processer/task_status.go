@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"go.uber.org/zap"
+
 	middleware "github.com/go-openapi/runtime/middleware"
 	"github.com/go-redis/redis"
 	"github.com/soopsio/mgmt/api/v1/custom/pipe/message"
@@ -13,13 +15,15 @@ import (
 	"github.com/soopsio/mgmt/api/v1/restapi/operations/tasks"
 )
 
-// collChildStatus 搜集子任务状态
-func collChildStatus(m *message.Message) {
+// collStatus 搜集子任务状态
+func collStatus(m *message.Message) {
 	lock.Lock()
 
 	// 推一条状态到 redis 的 task_events
-	msgbs, _ := m.MarshalJSON()
-	Redis.RPush(m.TaskID+"_events", string(msgbs)).Result()
+	// msgbs, _ := m.MarshalJSON()
+	// Redis.RPush(m.TaskID+"_events", string(msgbs)).Result()
+	// 改用 logger 同步状态到redis
+	logger.Info("", zap.String("task_id", m.TaskID), zap.String("status", m.Content.Status), zap.String("type", m.Type), zap.String("host", m.Content.Host), zap.String("task_name", m.Content.TaskName))
 
 	taskstatusdetail := &models.TaskState{}
 	taskstatusdetail.Taskid = m.TaskID

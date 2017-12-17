@@ -2,7 +2,9 @@ package processer
 
 import (
 	"errors"
+	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -78,14 +80,14 @@ func parsePlaybook(pbpath string, extvars apimodels.ExtraVars, hostinfo HostTask
 						case "script":
 							c.content = content
 							c.cmdType = "script"
-						case "shell":
+						case "command":
 							c.content = content
-							c.cmdType = "shell"
+							c.cmdType = "command"
 						default:
 							// TODO: 其它模块支持
 						}
 					}
-					hostinfo.TaskInfo[host].cmd = &c
+					hostinfo.TaskInfo[host].cmd = append(hostinfo.TaskInfo[host].cmd, c)
 				}
 			}
 		}
@@ -132,7 +134,7 @@ func vars2Map(v interface{}) map[string]interface{} {
 // 存储主机的任务信息
 type HostTask struct {
 	vars map[string]interface{}
-	cmd  *command
+	cmd  []command
 }
 
 type HostTasks struct {
@@ -201,121 +203,153 @@ func parseTaskToHostTask(task_id string, t *apimodels.Task) HostTasks {
 
 // 执行命令
 func (ht *HostTasks) runCommand() {
-	t := strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
-	msg := &message.Message{
-		TaskID: ht.TaskID,
-		Type:   "taskstatus",
-		Content: message.MsgContent{
-			Status:    "RUNNING",
-			TimeStamp: t,
-			Sequnce:   t,
-		},
+	ts := strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
+	var collTaskStatus = func(status string) {
+		msg := &message.Message{
+			TaskID: ht.TaskID,
+			Type:   "taskstatus",
+			Content: message.MsgContent{
+				Status:    status,
+				TimeStamp: ts,
+				Sequnce:   ts,
+			},
+		}
+		collStatus(msg)
 	}
-	collChildStatus(msg)
+
+	collTaskStatus("RUNNING")
 	// 多主机并行
 	wg := &sync.WaitGroup{}
 	for h, task := range ht.TaskInfo {
-		ht.Stderr = &Wstd{level: zapcore.ErrorLevel, task_id: ht.TaskID, host: h, task_name: task.cmd.name}
-		ht.Stdout = &Wstd{level: zapcore.InfoLevel, task_id: ht.TaskID, host: h, task_name: task.cmd.name}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			cstatus := "RUNNING"
-			t = strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
-			msg = &message.Message{
+		fmt.Println("TaskInfo:::", task.cmd)
+
+		t, _ := config.NewStaticProvider(task.vars)
+		user := t.Get("ansible_ssh_user").String()
+		pass := t.Get("ansible_ssh_pass").String()
+		addr := h + ":" + t.Get("ansible_ssh_port").String()
+		sshclient, err := NewSSHClient(user, pass, addr)
+		if err != nil {
+			log.Println(err)
+			msg := &message.Message{
 				TaskID: ht.TaskID,
 				Type:   "childstatus",
 				Content: message.MsgContent{
-					Status:    cstatus,
-					TimeStamp: t,
-					Sequnce:   t,
-					TaskName:  task.cmd.name,
+					Status:    "UNREACHABLE",
+					TimeStamp: ts,
+					Sequnce:   ts,
 					Host:      h,
+					Msg:       err.Error(),
 				},
 			}
-			collChildStatus(msg)
+			collStatus(msg)
+			continue
+		}
+		defer func() {
+			if err := sshclient.client.Close(); err != nil {
+				log.Println("关闭 %s 连接失败:%v", sshclient.client.RemoteAddr(), err)
+			}
+		}()
 
-			defer func() {
-				t = strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
-				msg = &message.Message{
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _, c := range task.cmd {
+				ht.Stderr = &Wstd{level: zapcore.ErrorLevel, task_id: ht.TaskID, host: h, task_name: c.name}
+				ht.Stdout = &Wstd{level: zapcore.InfoLevel, task_id: ht.TaskID, host: h, task_name: c.name}
+
+				cstatus := "RUNNING"
+				ts := strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
+				msg := &message.Message{
 					TaskID: ht.TaskID,
 					Type:   "childstatus",
 					Content: message.MsgContent{
 						Status:    cstatus,
-						TimeStamp: t,
-						Sequnce:   t,
-						TaskName:  task.cmd.name,
+						TimeStamp: ts,
+						Sequnce:   ts,
+						TaskName:  c.name,
 						Host:      h,
 					},
 				}
-				collChildStatus(msg)
-			}()
+				collStatus(msg)
 
-			t, _ := config.NewStaticProvider(task.vars)
-			user := t.Get("ansible_ssh_user").String()
-			pass := t.Get("ansible_ssh_pass").String()
-			addr := h + ":" + t.Get("ansible_ssh_port").String()
-			sshclient, err := NewSSHClient(user, pass, addr)
-			if err != nil {
-				log.Println(err)
-				cstatus = "UNREACHABLE"
-				return
-			}
-			defer sshclient.client.Close()
-			shles, err := shlex.Split(task.cmd.content)
-			if err != nil {
-				log.Println(err)
-				cstatus = "FAILURE"
-				return
-			}
-			if len(shles) > 0 {
-				log.Println("执行命令:", task.cmd.content, task.cmd.name)
-				if task.cmd.cmdType == "script" {
-					remoteTmpdir := "/tmp/.ansible_tmp/" + uuid.New().String()
-					defer func() {
-						sshclient.remoteRun("rm -rf "+remoteTmpdir, ht.Stdout, ht.Stderr)
-					}()
-					remoteScript := filepath.Join(remoteTmpdir, filepath.Base(shles[0]))
-					if err := sshclient.remoteRun("mkdir -p "+remoteTmpdir, ht.Stdout, ht.Stderr); err != nil {
-						logger.Error("mkdir -p "+remoteTmpdir+" failed", zap.Error(err))
-						cstatus = "FAILURE"
-						return
+				childStatus := func(status string) {
+					ts = strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
+					msg = &message.Message{
+						TaskID: ht.TaskID,
+						Type:   "childstatus",
+						Content: message.MsgContent{
+							Status:    status,
+							TimeStamp: ts,
+							Sequnce:   ts,
+							TaskName:  c.name,
+							Host:      h,
+						},
 					}
-					if err := sshclient.ScpFile(shles[0], remoteScript); err != nil {
-						logger.Error("SCP "+shles[0]+" failed", zap.Error(err))
-						cstatus = "FAILURE"
-						return
-					}
-					sshclient.remoteRun("chmod +x "+remoteScript, ht.Stdout, ht.Stderr)
-					remoteCmd := remoteScript
-					if len(shles) > 1 {
-						remoteCmd += " " + strings.Join(shles[1:], " ")
-					}
-					if err := sshclient.remoteRun(remoteCmd, ht.Stdout, ht.Stderr); err != nil {
-						logger.Error("Run "+remoteCmd+" failed", zap.Error(err))
-						cstatus = "FAILURE"
-						return
-					}
-
-					cstatus = "SUCCESSANDCHANGED"
+					collStatus(msg)
 				}
-			}
 
+				shles, err := shlex.Split(c.content)
+				if err != nil {
+					log.Println(err)
+					childStatus("FAILURE")
+					return
+				}
+
+				log.Println(shles)
+				if len(shles) > 0 {
+					log.Println("执行命令:", c.content, c.name)
+					if c.cmdType == "script" {
+						remoteTmpdir := "/tmp/.ansible_tmp/" + ht.TaskID + string(os.PathSeparator) + uuid.New().String()
+
+						remoteScript := filepath.Join(remoteTmpdir, filepath.Base(shles[0]))
+						if err := sshclient.remoteRun("mkdir -p "+remoteTmpdir, ht.Stdout, ht.Stderr); err != nil {
+							logger.Error("mkdir -p "+remoteTmpdir+" failed", zap.Error(err))
+							childStatus("FAILURE")
+							return
+						}
+						if err := sshclient.ScpFile(shles[0], remoteScript); err != nil {
+							logger.Error("SCP "+shles[0]+" failed", zap.Error(err))
+							childStatus("FAILURE")
+							return
+						}
+						sshclient.remoteRun("chmod +x "+remoteScript, ht.Stdout, ht.Stderr)
+						remoteCmd := remoteScript
+						if len(shles) > 1 {
+							// Join shles 会把原参数中的单引号、双引号去掉
+							// remoteCmd += " " + strings.Join(shles[1:], " ")
+							// 改为直接截取 c.content
+							remoteCmd += " " + c.content[len(shles[0])+1:]
+						}
+						if err := sshclient.remoteRun(remoteCmd, ht.Stdout, ht.Stderr); err != nil {
+							logger.Error("Run "+remoteCmd+" failed", zap.Error(err))
+							childStatus("FAILURE")
+							return
+						}
+
+						if err := sshclient.remoteRun("rm -rf "+"/tmp/.ansible_tmp/"+ht.TaskID, ht.Stdout, ht.Stderr); err != nil {
+							log.Printf("删除临时文件 %s 失败: %v", remoteTmpdir, err)
+						}
+					}
+					if c.cmdType == "command" {
+						fmt.Println("开始执行", c.content)
+						if err := sshclient.remoteRun(c.content, ht.Stdout, ht.Stderr); err != nil {
+							logger.Error("Run "+c.content+" failed", zap.Error(err))
+							childStatus("FAILURE")
+							return
+						}
+						fmt.Println("执行完毕,SUCCESSANDCHANGED", c.content)
+					}
+
+					// TODO: support shell
+					childStatus("SUCCESSANDCHANGED")
+				}
+
+			}
 		}()
 	}
 
 	wg.Wait()
-	t = strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
-	msg = &message.Message{
-		TaskID: ht.TaskID,
-		Type:   "taskstatus",
-		Content: message.MsgContent{
-			Status:    "FINISHED",
-			TimeStamp: t,
-			Sequnce:   t,
-		},
-	}
-	collChildStatus(msg)
+	collTaskStatus("FINISHED")
 	logger.Info("finished msg!!!", zap.String("task_id", ht.TaskID), zap.Bool("endflag", true))
 }
 
@@ -330,9 +364,9 @@ type Wstd struct {
 func (w Wstd) Write(p []byte) (n int, err error) {
 	switch w.level {
 	case zapcore.InfoLevel:
-		logger.Info(string(p), zap.String("task_id", w.task_id), zap.String("host", w.host), zap.String("task_name", w.task_name))
+		logger.Info(string(p), zap.String("task_id", w.task_id), zap.String("type", "log"), zap.String("host", w.host), zap.String("task_name", w.task_name))
 	case zapcore.ErrorLevel:
-		logger.Error(string(p), zap.String("task_id", w.task_id), zap.String("host", w.host), zap.String("task_name", w.task_name))
+		logger.Error(string(p), zap.String("task_id", w.task_id), zap.String("type", "log"), zap.String("host", w.host), zap.String("task_name", w.task_name))
 	default:
 		log.Println("unknow level")
 	}

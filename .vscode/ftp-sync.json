@@ -1,6 +1,6 @@
 {
     "remotePath": "/usr/local/gopath/src/github.com/soopsio/mgmt/",
-    "host": "10.10.89.127",
+    "host": "10.10.89.203",
     "username": "root",
     "password": "111111",
     "port": 22,
