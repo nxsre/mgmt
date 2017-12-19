@@ -112,7 +112,7 @@ func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 			return err
 		}
 		log.Println("等待运行结束", cmd)
-		session.Wait()
+		err = session.Wait()
 		wg.Wait()
 		log.Println("脚本执行完成", cmd)
 		return err
