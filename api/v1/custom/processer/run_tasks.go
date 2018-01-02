@@ -23,8 +23,28 @@ import (
 
 // 运行 Playbook
 func runPlaybook(pb string, extvars apimodels.ExtraVars, hostinfo HostTasks) {
+	var err error
 	pbpath := filepath.Join("/data/svn/ansible", pb)
-	hostinfo, _ = parsePlaybook(pbpath, extvars, hostinfo)
+	ts := strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
+	var collTaskStatus = func(status,m string) {
+		msg := &message.Message{
+			TaskID: hostinfo.TaskID,
+			Type:   "taskstatus",
+			Content: message.MsgContent{
+				Status:    status,
+				TimeStamp: ts,
+				Sequnce:   ts,
+				Msg: m,
+			},
+		}
+		collStatus(msg)
+	}
+
+	hostinfo, err = parsePlaybook(pbpath, extvars, hostinfo)
+	if err!=nil{
+		collTaskStatus("FAILED",err.Error())
+		return
+	}
 	hostinfo.runCommand()
 	logger.Info("debug", zap.Any("hostinfo", hostinfo), zap.Any("pb", pbpath), zap.Any("extravars", extvars))
 }

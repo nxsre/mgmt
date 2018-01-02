@@ -23,6 +23,7 @@ import (
 
 	"github.com/soopsio/zlog"
 	"github.com/soopsio/zlog/zlogbeat/cmd"
+	// 服务中心
 )
 
 func checkError(err error) {
