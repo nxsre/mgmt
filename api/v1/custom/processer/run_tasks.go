@@ -266,7 +266,7 @@ func (ht *HostTasks) runCommand() {
 		}
 		defer func() {
 			if err := sshclient.client.Close(); err != nil {
-				log.Println("关闭 %s 连接失败:%v", sshclient.client.RemoteAddr(), err)
+				log.Printf("关闭 %s 连接失败:%v", sshclient.client.RemoteAddr(), err)
 			}
 		}()
 

@@ -14,6 +14,7 @@ import (
 )
 
 func CreateTask(p tasks.CreateTaskParams) middleware.Responder {
+
 	jb, err := json.Marshal(p.Task)
 	if err != nil {
 		return tasks.NewCreateTaskDefault(500)
@@ -59,6 +60,5 @@ func CreateTask(p tasks.CreateTaskParams) middleware.Responder {
 	tidjb, _ := json.Marshal(tid)
 	Redis.RPush("ansible_task_id_channel_longpoll", string(tidjb)).Result()
 	Redis.RPush("ansible_task_id_channel", task_sign.UUID).Result()
-
 	return tasksRes.WithPayload(restasks)
 }

@@ -48,9 +48,11 @@ func collStatus(m *message.Message) {
 				log.Println("redis 中不存在此任务状态，设置子任务状态为 RUNNING")
 			}
 		} else {
-			err := json.Unmarshal([]byte(res), taskstatusdetail)
-			if err != nil {
-				fmt.Println("反序列化失败:", res, err)
+			if res != "" {
+				err := json.Unmarshal([]byte(res), taskstatusdetail)
+				if err != nil {
+					fmt.Println("反序列化失败:", res, err)
+				}
 			}
 			if _, ok := taskstatusdetail.Childstatus[m.Content.Host]; ok {
 				taskstatusdetail.Childstatus[m.Content.Host][m.Content.TaskName] = m.Content.Status
@@ -66,7 +68,7 @@ func collStatus(m *message.Message) {
 		}
 	}
 	if m.Type == "taskstatus" {
-		if err != redis.Nil {
+		if err != redis.Nil && res != "" {
 			err := json.Unmarshal([]byte(res), taskstatusdetail)
 			if err != nil {
 				fmt.Println("反序列化失败:", res, err)

@@ -52,7 +52,6 @@ func (this *TaskIDController) Get() {
 		tid.Timeout = `no events before timeout`
 	}
 	this.Data["json"] = tid
-
 	this.ServeJSON(true)
 }
 

@@ -37,6 +37,11 @@ func (c *sshClient) ScpFile(src, dst string) error {
 	return scp.NewSCP(c.client).SendFile(src, dst)
 }
 
+type reqRes struct {
+	err error
+	rc  bool
+}
+
 func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 	if session, err := c.client.NewSession(); err == nil {
 
@@ -111,10 +116,62 @@ func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 		if err := session.Start("bash -c \"" + cmd + "\""); err != nil {
 			return err
 		}
-		log.Println("等待运行结束", cmd)
+		log.Println("等待运行结束", c.client.LocalAddr(), cmd)
+
+		go func() {
+			resch := make(chan reqRes)
+
+			// 后台发送 keepalived 探测包
+			session, err := c.client.NewSession()
+			if err != nil {
+				c.client.Close()
+				return
+			}
+
+			counter := 0
+			timer := time.NewTimer(10 * time.Second)
+			for {
+				time.Sleep(1 * time.Second)
+				go func() {
+					b, err := session.SendRequest("keepalive@golang.org", false, nil)
+					resch <- reqRes{
+						err: err,
+						rc:  b,
+					}
+				}()
+
+				select {
+				case res := <-resch:
+					if res.err != nil {
+						if res.err == io.EOF {
+							log.Println("连接关闭：", c.client.LocalAddr())
+						} else {
+							log.Println("发送心跳包失败", c.client.LocalAddr(), err)
+							c.client.Close()
+						}
+						return
+					} else {
+						if res.rc {
+							// log.Println("心跳正常", c.client.LocalAddr())
+						} else {
+							log.Println("心跳异常", c.client.LocalAddr())
+							c.client.Close()
+						}
+					}
+				case <-timer.C:
+					if counter >= 3 {
+						log.Println("心跳超时", c.client.LocalAddr())
+						c.client.Close()
+						return
+					}
+					counter++
+				}
+				timer.Reset(time.Second * 10)
+			}
+		}()
 		err = session.Wait()
 		wg.Wait()
-		log.Println("脚本执行完成", cmd)
+		log.Println("脚本执行完成", c.client.LocalAddr(), cmd)
 		return err
 		// return session.Run()
 
