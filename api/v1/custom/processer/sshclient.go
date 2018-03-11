@@ -118,7 +118,7 @@ func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 		}
 		log.Println("等待运行结束", c.client.LocalAddr(), cmd)
 
-		go func() {
+		/* go func() {
 			resch := make(chan reqRes)
 
 			// 后台发送 keepalived 探测包
@@ -168,7 +168,7 @@ func (c *sshClient) remoteRun(cmd string, stdout, stderr io.Writer) error {
 				}
 				timer.Reset(time.Second * 10)
 			}
-		}()
+		}() */
 		err = session.Wait()
 		wg.Wait()
 		log.Println("脚本执行完成", c.client.LocalAddr(), cmd)

@@ -22,6 +22,10 @@ func init() {
 
 func processMsg() {
 	for {
+		eventTtl, err := time.ParseDuration(cfg.DefaultString("redis::events_ttl", "86400s"))
+		if err != nil {
+			panic(err)
+		}
 		if strs := Redis.BLPop(1*time.Second, "ansible_task_id_channel"); len(strs.Val()) > 1 {
 			log.Println("TASKID::::", strs.Val()[1])
 			go func() {
@@ -33,7 +37,6 @@ func processMsg() {
 						count++
 						timer.Reset(time.Second * 5)
 					default:
-						// 两个小时没有日常产生则任务超时
 						if count > 1440 {
 							log.Println(strs.Val()[1], " 获取日志超时，退出日志监听")
 							t := strings.Replace(time.Now().Format("20060102150405.0000"), ".", "", -1)
@@ -48,7 +51,7 @@ func processMsg() {
 							}
 							msgbs, _ := msg.MarshalJSON()
 							Redis.RPush(strs.Val()[1]+"_events", string(msgbs)).Result()
-							Redis.Expire(strs.Val()[1]+"_events", 22800*time.Second)
+							Redis.Expire(strs.Val()[1]+"_events", eventTtl)
 							return
 						}
 						if msgstrs := Redis.BLPop(10*time.Second, strs.Val()[1]+"_logs"); len(msgstrs.Val()) > 1 {
@@ -75,7 +78,7 @@ func processMsg() {
 								}
 								msgbs, _ := msg.MarshalJSON()
 								Redis.RPush(strs.Val()[1]+"_events", string(msgbs)).Result()
-								Redis.Expire(strs.Val()[1]+"_events", 22800*time.Second)
+								Redis.Expire(strs.Val()[1]+"_events", eventTtl)
 							}
 						}
 						count = 0
